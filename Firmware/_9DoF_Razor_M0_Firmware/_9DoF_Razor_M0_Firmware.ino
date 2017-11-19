@@ -40,6 +40,8 @@ Hardware:
 
 MPU9250_DMP imu; // Create an instance of the MPU9250_DMP class
 
+float initialmagyaw = -1000;
+
 /////////////////////////////
 // Logging Control Globals //
 /////////////////////////////
@@ -53,6 +55,8 @@ bool enableGyro = ENABLE_GYRO_LOG;
 bool enableCompass = ENABLE_MAG_LOG;
 bool enableQuat = ENABLE_QUAT_LOG;
 bool enableEuler = ENABLE_EULER_LOG;
+bool enableEuler9DOF = ENABLE_EULER9DOF_LOG;
+bool enableCal9DOF = ENABLE_CAL9DOF_LOG;
 bool enableHeading = ENABLE_HEADING_LOG;
 unsigned short accelFSR = IMU_ACCEL_FSR;
 unsigned short gyroFSR = IMU_GYRO_FSR;
@@ -94,6 +98,8 @@ void blinkLED()
   FlashStorage(flashEnableCompass, bool);
   FlashStorage(flashEnableQuat, bool);
   FlashStorage(flashEnableEuler, bool);
+  FlashStorage(flashEnableEuler9DOF, bool);
+  FlashStorage(flashEnableCal9DOF, bool);
   FlashStorage(flashEnableHeading, bool);
   FlashStorage(flashAccelFSR, unsigned short);
   FlashStorage(flashGyroFSR, unsigned short);
@@ -149,7 +155,7 @@ void loop()
     return; // If that fails (uh, oh), return to top
 
   // If enabled, read from the compass.
-  if ( (enableCompass || enableHeading) && (imu.updateCompass() != INV_SUCCESS) )
+  if ( (enableCompass || enableHeading || enableEuler9DOF) && (imu.updateCompass() != INV_SUCCESS) )
     return; // If compass read fails (uh, oh) return to top
 
   // If logging (to either UART and SD card) is enabled
@@ -241,6 +247,48 @@ void logIMUData(void)
     imuLog += String(imu.roll, 2) + ", ";
     imuLog += String(imu.yaw, 2) + ", ";
   }
+  if (enableEuler9DOF) // If Euler-angle-mag logging is enabled
+  {
+	  imu.computeEulerAngles();
+
+	  // This is not a correct way to filter...
+
+	  float magfusioncoef = 1.0f;
+	  float magyaw = -imu.computeCompassHeading()*PI/180.0f;
+	  float imuyaw = imu.yaw;
+	  if (initialmagyaw == -1000)
+	  {
+		  initialmagyaw = magyaw; // Assume no mag perturbation at init...
+	  }
+	  float fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw)+magfusioncoef*sin(magyaw), 
+		  (1-magfusioncoef)*cos(imuyaw+initialmagyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
+
+	  // Convert from NWU to NED...
+	  imuLog += "#YPR="+String(-fusionyaw, 2) + ","+String(-imu.pitch, 2) + ","+String(imu.roll, 2) + ", ";
+  }
+  if (enableCal9DOF) // If Cal9DOF logging is enabled
+  {
+	  // Remove last comma/space:
+	  imuLog.remove(imuLog.length() - 2, 2);
+	  imuLog += "\r\n"; // Add a new line
+
+	  // Coefficients for ptrbrtz firmware compatibility...
+
+	  imuLog += + "#A-C=";
+      imuLog += String(-256.0f*imu.calcAccel(imu.ax)) + ",";
+      imuLog += String(256.0f*imu.calcAccel(imu.ay)) + ",";
+      imuLog += String(256.0f*imu.calcAccel(imu.az)) + "\r\n";
+
+	  imuLog += + "#M-C=";
+      imuLog += String(10.0f*imu.calcMag(imu.my)*100.0f/600.0f) + ",";
+      imuLog += String(-10.0f*imu.calcMag(imu.mx)*100.0f/600.0f) + ",";
+      imuLog += String(10.0f*imu.calcMag(imu.mz)*100.0f/600.0f) + "\r\n";
+
+	  imuLog += + "#G-C=";
+      imuLog += String(imu.calcGyro(imu.gx)*PI/180.0f) + ",";
+      imuLog += String(-imu.calcGyro(imu.gy)*PI/180.0f) + ",";
+      imuLog += String(-imu.calcGyro(imu.gz)*PI/180.0f) + ", ";
+ }
   if (enableHeading) // If heading logging is enabled
   {
     imuLog += String(imu.computeCompassHeading(), 2) + ", ";
@@ -323,6 +371,7 @@ bool initIMU(void)
   {
     // Gyro calibration re-calibrates the gyro after a set amount
     // of no motion detected
+	dmpFeatureMask |= DMP_FEATURE_GYRO_CAL; //added this line
     dmpFeatureMask |= DMP_FEATURE_SEND_CAL_GYRO;
   }
   else
@@ -457,6 +506,18 @@ void parseSerialInput(char c)
     flashEnableEuler.write(enableEuler);
 #endif
     break;
+  case ENABLE_EULER9DOF: // Enable/disable Euler angle (roll, pitch, yaw)
+    enableEuler9DOF = !enableEuler9DOF;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableEuler9DOF.write(enableEuler9DOF);
+#endif
+    break;
+  case ENABLE_CAL9DOF: // Enable/disable CAL9DOF
+    enableCal9DOF = !enableCal9DOF;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableCal9DOF.write(enableCal9DOF);
+#endif
+    break;
   case ENABLE_HEADING: // Enable/disable heading output
     enableHeading = !enableHeading;
 #ifdef ENABLE_NVRAM_STORAGE
@@ -504,7 +565,7 @@ void parseSerialInput(char c)
 #endif
     LOG_PORT.println("Gyro FSR set to +/-" + String(temp) + " dps");
     break;
-  case ENABLE_SD_LOGGING: // Enable/disable SD card logging
+  case ENABLE_SD: // Enable/disable SD card logging
     enableSDLogging = !enableSDLogging;
 #ifdef ENABLE_NVRAM_STORAGE
     flashEnableSDLogging.write(enableSDLogging);
@@ -533,6 +594,8 @@ void parseSerialInput(char c)
       flashEnableCompass.write(enableCompass);
       flashEnableQuat.write(enableQuat);
       flashEnableEuler.write(enableEuler);
+      flashEnableEuler9DOF.write(enableEuler9DOF);
+      flashEnableCal9DOF.write(enableCal9DOF);
       flashEnableHeading.write(enableHeading);
       flashAccelFSR.write(accelFSR);
       flashGyroFSR.write(gyroFSR);
@@ -552,6 +615,8 @@ void parseSerialInput(char c)
       enableCompass = flashEnableCompass.read();
       enableQuat = flashEnableQuat.read();
       enableEuler = flashEnableEuler.read();
+      enableEuler9DOF = flashEnableEuler9DOF.read();
+      enableCal9DOF = flashEnableCal9DOF.read();
       enableHeading = flashEnableHeading.read();
       accelFSR = flashAccelFSR.read();
       gyroFSR = flashGyroFSR.read();
