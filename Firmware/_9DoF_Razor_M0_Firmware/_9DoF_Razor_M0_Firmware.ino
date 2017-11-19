@@ -254,7 +254,7 @@ void logIMUData(void)
 	  // This is not a correct way to filter...
 
 	  float magfusioncoef = 1.0f;
-	  float magyaw = -imu.computeCompassHeading()*PI/180.0f;
+	  float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
 	  float imuyaw = imu.yaw;
 	  if (initialmagyaw == -1000)
 	  {
