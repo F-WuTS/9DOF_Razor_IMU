@@ -253,15 +253,19 @@ void logIMUData(void)
 
 	  // This is not a correct way to filter...
 
-	  float magfusioncoef = 1.0f;
-	  float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
-	  float imuyaw = imu.yaw;
-	  if (initialmagyaw == -1000)
-	  {
-		  initialmagyaw = magyaw; // Assume no mag perturbation at init...
-	  }
-	  float fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw)+magfusioncoef*sin(magyaw), 
-		  (1-magfusioncoef)*cos(imuyaw+initialmagyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
+	  //float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
+	  //float imuyaw = imu.yaw;
+	  //float magfusioncoef = 1.0f;
+	  //if (initialmagyaw == -1000)
+	  //{
+		 // initialmagyaw = magyaw; // Assume no mag perturbation at init...
+	  //}
+	  //float fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw)+magfusioncoef*sin(magyaw), 
+		 // (1-magfusioncoef)*cos(imuyaw+initialmagyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
+	  float fusionyaw = -imu.computeCompensatedCompassHeading();
+
+	  if (fusionyaw > 180.0f) fusionyaw -= (2 * 180.0f);
+	  else if (fusionyaw < -180.0f) fusionyaw += (2 * 180.0f);
 
 	  // Convert from NWU to NED...
 	  imuLog += "#YPR="+String(-fusionyaw, 2) + ","+String(-imu.pitch, 2) + ","+String(imu.roll, 2) + ", ";
