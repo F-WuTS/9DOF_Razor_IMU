@@ -40,7 +40,8 @@ Hardware:
 
 MPU9250_DMP imu; // Create an instance of the MPU9250_DMP class
 
-float initialmagyaw = -1000;
+float initialmagyaw = -10000;
+float initialimuyaw = -10000;
 
 /////////////////////////////
 // Logging Control Globals //
@@ -48,6 +49,7 @@ float initialmagyaw = -1000;
 // Defaults all set in config.h
 bool enableSDLogging = ENABLE_SD_LOGGING;
 bool enableSerialLogging = ENABLE_UART_LOGGING;
+bool enableMagYaw = ENABLE_MAG_YAW_LOG;
 bool enableTimeLog = ENABLE_TIME_LOG;
 bool enableCalculatedValues = ENABLE_CALCULATED_LOG;
 bool enableAccel = ENABLE_ACCEL_LOG;
@@ -57,6 +59,7 @@ bool enableQuat = ENABLE_QUAT_LOG;
 bool enableEuler = ENABLE_EULER_LOG;
 bool enableEuler9DOF = ENABLE_EULER9DOF_LOG;
 bool enableCal9DOF = ENABLE_CAL9DOF_LOG;
+bool enableROS9DOF = ENABLE_ROS9DOF_LOG;
 bool enableHeading = ENABLE_HEADING_LOG;
 unsigned short accelFSR = IMU_ACCEL_FSR;
 unsigned short gyroFSR = IMU_GYRO_FSR;
@@ -91,7 +94,8 @@ void blinkLED()
   FlashStorage(flashFirstRun, bool);
   FlashStorage(flashEnableSD, bool);
   FlashStorage(flashEnableSerialLogging, bool);
-  FlashStorage(flashenableTime, bool);
+  FlashStorage(flashEnableMagYaw, bool);
+  FlashStorage(flashEnableTime, bool);
   FlashStorage(flashEnableCalculatedValues, bool);
   FlashStorage(flashEnableAccel, bool);
   FlashStorage(flashEnableGyro, bool);
@@ -100,6 +104,7 @@ void blinkLED()
   FlashStorage(flashEnableEuler, bool);
   FlashStorage(flashEnableEuler9DOF, bool);
   FlashStorage(flashEnableCal9DOF, bool);
+  FlashStorage(flashEnableROS9DOF, bool);
   FlashStorage(flashEnableHeading, bool);
   FlashStorage(flashAccelFSR, unsigned short);
   FlashStorage(flashGyroFSR, unsigned short);
@@ -155,7 +160,7 @@ void loop()
     return; // If that fails (uh, oh), return to top
 
   // If enabled, read from the compass.
-  if ( (enableCompass || enableHeading || enableEuler9DOF) && (imu.updateCompass() != INV_SUCCESS) )
+  if ( (enableCompass || enableHeading || enableEuler9DOF || enableROS9DOF) && (imu.updateCompass() != INV_SUCCESS) )
     return; // If compass read fails (uh, oh) return to top
 
   // If logging (to either UART and SD card) is enabled
@@ -167,8 +172,77 @@ void loop()
   if ( Serial1.available() )
   {
     if ( Serial1.read() == '$' ) production_testing();
-  }
-  
+  }  
+}
+
+//
+// From ptrbrtz firmware...
+//
+// Multiply 3x3 matrix with vector: out = a * b
+// out has to different from b (no in-place)!
+void Matrix_Vector_Multiply(const float a[3][3], const float b[3], float out[3])
+{
+	for (int x = 0; x < 3; x++)
+	{
+		out[x] = a[x][0] * b[0] + a[x][1] * b[1] + a[x][2] * b[2];
+	}
+}
+
+//
+// From ptrbrtz firmware...
+//
+// See config.h for ellipsoid parameters...
+float computeCompensatedCompassHeadingWithCalib(void)
+{
+	float mag_x = 0;
+	float mag_y = 0;
+	float roll = imu.roll*PI/180.0f;
+	float pitch = -imu.pitch*PI/180.0f;
+	float cos_roll = cos(roll);
+	float sin_roll = sin(roll);
+	float cos_pitch = cos(pitch);
+	float sin_pitch = sin(pitch);
+
+	// Conversion from uT to mGauss.
+	float magnetom[3] = { 10.0f*imu.calcMag(imu.my), -10.0f*imu.calcMag(imu.mx), 10.0f*imu.calcMag(imu.mz) };
+
+	float magnetom_tmp[3] = { 0, 0, 0 };
+
+	float MAGN_X_OFFSET = ((MAGN_X_MIN + MAGN_X_MAX) / 2.0f);
+	float MAGN_Y_OFFSET = ((MAGN_Y_MIN + MAGN_Y_MAX) / 2.0f);
+	float MAGN_Z_OFFSET = ((MAGN_Z_MIN + MAGN_Z_MAX) / 2.0f);
+	float MAGN_X_SCALE = (100.0f / (MAGN_X_MAX - MAGN_X_OFFSET));
+	float MAGN_Y_SCALE = (100.0f / (MAGN_Y_MAX - MAGN_Y_OFFSET));
+	float MAGN_Z_SCALE = (100.0f / (MAGN_Z_MAX - MAGN_Z_OFFSET));
+
+	// Compensate magnetometer error.
+	if (CALIBRATION__MAGN_USE_EXTENDED)
+	{
+		for (int i = 0; i < 3; i++)
+			magnetom_tmp[i] = magnetom[i] - magn_ellipsoid_center[i];
+		Matrix_Vector_Multiply(magn_ellipsoid_transform, magnetom_tmp, magnetom);
+	}
+	else
+	{
+		magnetom[0] = (magnetom[0] - MAGN_X_OFFSET) * MAGN_X_SCALE;
+		magnetom[1] = (magnetom[1] - MAGN_Y_OFFSET) * MAGN_Y_SCALE;
+		magnetom[2] = (magnetom[2] - MAGN_Z_OFFSET) * MAGN_Z_SCALE;
+	}
+
+	// Tilt compensated magnetic field X
+	mag_x = magnetom[0] * cos_pitch + magnetom[1] * sin_roll * sin_pitch + magnetom[2] * cos_roll * sin_pitch;
+	// Tilt compensated magnetic field Y
+	mag_y = magnetom[1] * cos_roll - magnetom[2] * sin_roll;
+	// Magnetic Heading
+	float heading = atan2(-mag_y, mag_x); // Convert to similar values as computeCompassHeading()...
+
+	if (heading > PI) heading -= (2 * PI);
+	else if (heading < -PI) heading += (2 * PI);
+	else if (heading < 0) heading += 2 * PI;
+
+	heading *= 180.0 / PI;
+
+	return heading;
 }
 
 void logIMUData(void)
@@ -249,50 +323,83 @@ void logIMUData(void)
   }
   if (enableEuler9DOF) // If Euler-angle-mag logging is enabled
   {
-	  imu.computeEulerAngles();
+	imu.computeEulerAngles();
 
-	  // This is not a correct way to filter...
+	// This is not a correct way to filter...
 
-	  //float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
-	  //float imuyaw = imu.yaw;
-	  //float magfusioncoef = 1.0f;
-	  //if (initialmagyaw == -1000)
-	  //{
-		 // initialmagyaw = magyaw; // Assume no mag perturbation at init...
-	  //}
-	  //float fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw)+magfusioncoef*sin(magyaw), 
-		 // (1-magfusioncoef)*cos(imuyaw+initialmagyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
-	  float fusionyaw = -imu.computeCompensatedCompassHeading();
+	//float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
+	float magyaw = -computeCompensatedCompassHeadingWithCalib()*PI/180.0f;
+	float imuyaw = imu.yaw*PI/180.0f;
+	float fusionyaw = 0;
+	float magfusioncoef = 0.0f;
+	if (initialmagyaw == -10000) initialmagyaw = magyaw;
+	if (initialimuyaw == -10000) initialimuyaw = imuyaw;
+	if (enableMagYaw)
+		fusionyaw = magyaw*180.0f/PI;
+	else
+		fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw-initialimuyaw)+magfusioncoef*sin(magyaw),
+		(1-magfusioncoef)*cos(imuyaw+initialmagyaw-initialimuyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
 
-	  if (fusionyaw > 180.0f) fusionyaw -= (2 * 180.0f);
-	  else if (fusionyaw < -180.0f) fusionyaw += (2 * 180.0f);
+	if (fusionyaw > 180.0f) fusionyaw -= (2 * 180.0f);
+	else if (fusionyaw < -180.0f) fusionyaw += (2 * 180.0f);
 
-	  // Convert from NWU to NED...
-	  imuLog += "#YPR="+String(-fusionyaw, 2) + ","+String(-imu.pitch, 2) + ","+String(imu.roll, 2) + ", ";
+	// Convert from NWU to NED...
+	imuLog += "#YPR="+String(-fusionyaw, 2) + ","+String(-imu.pitch, 2) + ","+String(imu.roll, 2) + ", ";
   }
   if (enableCal9DOF) // If Cal9DOF logging is enabled
   {
-	  // Remove last comma/space:
-	  imuLog.remove(imuLog.length() - 2, 2);
-	  imuLog += "\r\n"; // Add a new line
+	// Remove last comma/space:
+	imuLog.remove(imuLog.length() - 2, 2);
+	imuLog += "\r\n"; // Add a new line
 
-	  // Coefficients for ptrbrtz firmware compatibility...
+	// Coefficients for ptrbrtz firmware compatibility...
 
-	  imuLog += + "#A-C=";
-      imuLog += String(-256.0f*imu.calcAccel(imu.ax)) + ",";
-      imuLog += String(256.0f*imu.calcAccel(imu.ay)) + ",";
-      imuLog += String(256.0f*imu.calcAccel(imu.az)) + "\r\n";
+	imuLog += + "#A-C=";
+    imuLog += String(-256.0f*imu.calcAccel(imu.ax)) + ",";
+    imuLog += String(256.0f*imu.calcAccel(imu.ay)) + ",";
+    imuLog += String(256.0f*imu.calcAccel(imu.az)) + "\r\n";
 
-	  imuLog += + "#M-C=";
-      imuLog += String(10.0f*imu.calcMag(imu.my)*100.0f/600.0f) + ",";
-      imuLog += String(-10.0f*imu.calcMag(imu.mx)*100.0f/600.0f) + ",";
-      imuLog += String(10.0f*imu.calcMag(imu.mz)*100.0f/600.0f) + "\r\n";
+	imuLog += + "#M-C=";
+    imuLog += String(10.0f*imu.calcMag(imu.my)*100.0f/600.0f) + ",";
+    imuLog += String(-10.0f*imu.calcMag(imu.mx)*100.0f/600.0f) + ",";
+    imuLog += String(10.0f*imu.calcMag(imu.mz)*100.0f/600.0f) + "\r\n";
 
-	  imuLog += + "#G-C=";
-      imuLog += String(imu.calcGyro(imu.gx)*PI/180.0f) + ",";
-      imuLog += String(-imu.calcGyro(imu.gy)*PI/180.0f) + ",";
-      imuLog += String(-imu.calcGyro(imu.gz)*PI/180.0f) + ", ";
- }
+	imuLog += + "#G-C=";
+    imuLog += String(imu.calcGyro(imu.gx)*PI/180.0f) + ",";
+    imuLog += String(-imu.calcGyro(imu.gy)*PI/180.0f) + ",";
+    imuLog += String(-imu.calcGyro(imu.gz)*PI/180.0f) + ", ";
+  }
+  if (enableROS9DOF) // If ROS-compatible logging is enabled
+  {
+	imu.computeEulerAngles();
+
+	// This is not a correct way to filter...
+
+	//float magyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
+	float magyaw = -computeCompensatedCompassHeadingWithCalib()*PI/180.0f;
+	float imuyaw = imu.yaw*PI/180.0f;
+	float fusionyaw = 0;
+	float magfusioncoef = 0.0f;
+	if (initialmagyaw == -10000) initialmagyaw = magyaw;
+	if (initialimuyaw == -10000) initialimuyaw = imuyaw;
+	if (enableMagYaw)
+		fusionyaw = magyaw*180.0f/PI;
+	else
+		fusionyaw = atan2((1-magfusioncoef)*sin(imuyaw+initialmagyaw-initialimuyaw)+magfusioncoef*sin(magyaw),
+		(1-magfusioncoef)*cos(imuyaw+initialmagyaw-initialimuyaw)+magfusioncoef*cos(magyaw))*180.0f/PI;
+
+	if (fusionyaw > 180.0f) fusionyaw -= (2 * 180.0f);
+	else if (fusionyaw < -180.0f) fusionyaw += (2 * 180.0f);
+
+	// Convert from NWU to NED...
+	imuLog += "#YPRAG="+String(-fusionyaw, 2) + ","+String(-imu.pitch, 2) + ","+String(imu.roll, 2) + ",";
+    imuLog += String(-256.0f*imu.calcAccel(imu.ax)) + ",";
+    imuLog += String(256.0f*imu.calcAccel(imu.ay)) + ",";
+    imuLog += String(256.0f*imu.calcAccel(imu.az)) + ",";
+    imuLog += String(imu.calcGyro(imu.gx)*PI/180.0f) + ",";
+    imuLog += String(-imu.calcGyro(imu.gy)*PI/180.0f) + ",";
+    imuLog += String(-imu.calcGyro(imu.gz)*PI/180.0f) + ", ";
+  }
   if (enableHeading) // If heading logging is enabled
   {
     imuLog += String(imu.computeCompassHeading(), 2) + ", ";
@@ -462,6 +569,29 @@ void parseSerialInput(char c)
   unsigned short temp;
   switch (c)
   {
+  case ENABLE_LOGGING:
+    enableSerialLogging = true;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableSerialLogging.write(enableSerialLogging);
+#endif
+    break;
+  case DISABLE_LOGGING:
+    enableSerialLogging = false;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableSerialLogging.write(enableSerialLogging);
+#endif
+    break;
+  case ENABLE_MAG_YAW:
+    enableMagYaw = !enableMagYaw;
+	// Update reference for yaw...
+	//initialmagyaw = -imu.computeCompensatedCompassHeading()*PI/180.0f;
+	initialmagyaw = -computeCompensatedCompassHeadingWithCalib()*PI/180.0f;
+	initialimuyaw = imu.yaw*PI/180.0f;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableMagYaw.write(enableMagYaw);
+#endif
+    break;
+#ifndef ROS_PARSE_INPUT_MODE
   case PAUSE_LOGGING: // Pause logging on SPACE
     enableSerialLogging = !enableSerialLogging;
 #ifdef ENABLE_NVRAM_STORAGE
@@ -471,7 +601,7 @@ void parseSerialInput(char c)
   case ENABLE_TIME: // Enable time (milliseconds) logging
     enableTimeLog = !enableTimeLog;
 #ifdef ENABLE_NVRAM_STORAGE
-    flashenableTime.write(enableTimeLog);
+    flashEnableTime.write(enableTimeLog);
 #endif
     break;
   case ENABLE_ACCEL: // Enable/disable accelerometer logging
@@ -520,6 +650,12 @@ void parseSerialInput(char c)
     enableCal9DOF = !enableCal9DOF;
 #ifdef ENABLE_NVRAM_STORAGE
     flashEnableCal9DOF.write(enableCal9DOF);
+#endif
+    break;
+  case ENABLE_ROS9DOF: // Enable/disable ROS-compatible output
+    enableROS9DOF = !enableROS9DOF;
+#ifdef ENABLE_NVRAM_STORAGE
+    flashEnableROS9DOF.write(enableROS9DOF);
 #endif
     break;
   case ENABLE_HEADING: // Enable/disable heading output
@@ -575,6 +711,7 @@ void parseSerialInput(char c)
     flashEnableSDLogging.write(enableSDLogging);
 #endif
     break;
+#endif // ROS_PARSE_INPUT_MODE
   default: // If an invalid character, do nothing
     break;
   }
@@ -591,7 +728,8 @@ void parseSerialInput(char c)
       // nvm locations:
       flashEnableSDLogging.write(enableSDLogging);
       flashEnableSerialLogging.write(enableSerialLogging);
-      flashenableTime.write(enableTimeLog);
+      flashEnableMagYaw.write(enableMagYaw);
+      flashEnableTime.write(enableTimeLog);
       flashEnableCalculatedValues.write(enableCalculatedValues);
       flashEnableAccel.write(enableAccel);
       flashEnableGyro.write(enableGyro);
@@ -600,6 +738,7 @@ void parseSerialInput(char c)
       flashEnableEuler.write(enableEuler);
       flashEnableEuler9DOF.write(enableEuler9DOF);
       flashEnableCal9DOF.write(enableCal9DOF);
+      flashEnableROS9DOF.write(enableROS9DOF);
       flashEnableHeading.write(enableHeading);
       flashAccelFSR.write(accelFSR);
       flashGyroFSR.write(gyroFSR);
@@ -612,7 +751,8 @@ void parseSerialInput(char c)
       // Read from NVM and set the logging parameters:
       enableSDLogging = flashEnableSDLogging.read();
       enableSerialLogging = flashEnableSerialLogging.read();
-      enableTimeLog = flashenableTime.read();
+      enableMagYaw = flashEnableMagYaw.read();
+      enableTimeLog = flashEnableTime.read();
       enableCalculatedValues = flashEnableCalculatedValues.read();
       enableAccel = flashEnableAccel.read();
       enableGyro = flashEnableGyro.read();
@@ -621,6 +761,7 @@ void parseSerialInput(char c)
       enableEuler = flashEnableEuler.read();
       enableEuler9DOF = flashEnableEuler9DOF.read();
       enableCal9DOF = flashEnableCal9DOF.read();
+      enableROS9DOF = flashEnableROS9DOF.read();
       enableHeading = flashEnableHeading.read();
       accelFSR = flashAccelFSR.read();
       gyroFSR = flashGyroFSR.read();

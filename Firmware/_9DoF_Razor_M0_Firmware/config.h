@@ -9,6 +9,7 @@
 //#define ENABLE_QUAT_LOG       false
 //#define ENABLE_EULER_LOG      false
 //#define ENABLE_HEADING_LOG    false
+#define ENABLE_MAG_YAW_LOG    true
 #define ENABLE_TIME_LOG       false
 #define ENABLE_CALCULATED_LOG true
 #define ENABLE_ACCEL_LOG      false
@@ -16,9 +17,30 @@
 #define ENABLE_MAG_LOG        false
 #define ENABLE_QUAT_LOG       false
 #define ENABLE_EULER_LOG      false
-#define ENABLE_EULER9DOF_LOG  true
+#define ENABLE_EULER9DOF_LOG  false
 #define ENABLE_CAL9DOF_LOG    false
+#define ENABLE_ROS9DOF_LOG    true
 #define ENABLE_HEADING_LOG    false
+
+// For ROS compatibility...
+#define ROS_PARSE_INPUT_MODE
+
+// For calibration, see ptrbrtz firmware...
+
+// Magnetometer (standard calibration mode)
+// "magn x,y,z (min/max) = X_MIN/X_MAX  Y_MIN/Y_MAX  Z_MIN/Z_MAX"
+float MAGN_X_MIN = -600;
+float MAGN_X_MAX = 600;
+float MAGN_Y_MIN = -600;
+float MAGN_Y_MAX = 600;
+float MAGN_Z_MIN = -600;
+float MAGN_Z_MAX = 600;
+
+// Magnetometer (extended calibration mode)
+// Set to true to use extended magnetometer calibration (compensates hard & soft iron errors)
+boolean CALIBRATION__MAGN_USE_EXTENDED = false;
+float magn_ellipsoid_center[3] = {0, 0, 0};
+float magn_ellipsoid_transform[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 
 ////////////////////////////////////////
 // Enable Non-Volatile Memory Storage //
@@ -68,6 +90,9 @@
 // Serial Commands //
 /////////////////////
 #define PAUSE_LOGGING     ' ' // Space - Pause SD/UART logging
+#define ENABLE_LOGGING    '1' // For ROS compatibility...
+#define DISABLE_LOGGING   '0' // For ROS compatibility...
+#define ENABLE_MAG_YAW    'I' // Enable/disable the use of magnetometers for yaw computation
 #define ENABLE_TIME       't' // Enable/disable time log (milliseconds)
 #define ENABLE_ACCEL      'a' // Enable/disable accelerometer log (ax, ay, az)
 #define ENABLE_GYRO       'g' // Enable/disable gyroscope log (gx, gy, gz)
@@ -76,7 +101,8 @@
 #define ENABLE_QUAT       'q' // Enable/disable quaternion logging (qw, qx, qy, qz)
 #define ENABLE_EULER      'e' // Enable/disable estimated euler angles (roll, pitch, yaw)
 #define ENABLE_EULER9DOF  '9' // Enable/disable estimated euler angles (roll, pitch, yaw) using also mag data
-#define ENABLE_CAL9DOF    '#' // Enable/disable old calibrated data output format
+#define ENABLE_CAL9DOF    'C' // Enable/disable old calibrated data output format
+#define ENABLE_ROS9DOF    'R' // Enable/disable ROS-compatible output format
 #define ENABLE_HEADING    'h' // Enable/disable estimated heading logging
 #define SET_LOG_RATE      'r' // Adjust logging rate from 1-200 Hz (in 10 Hz increments)
 #define SET_ACCEL_FSR     'A' // Set accelerometer FSR (2, 4, 8, 16g)
