@@ -59,7 +59,7 @@ bool enableQuat = ENABLE_QUAT_LOG;
 bool enableEuler = ENABLE_EULER_LOG;
 bool enableEuler9DOF = ENABLE_EULER9DOF_LOG;
 bool enableCal9DOF = ENABLE_CAL9DOF_LOG;
-bool enableROS9DOF = ENABLE_ROS9DOF_LOG;
+bool enableALT9DOF = ENABLE_ALT9DOF_LOG;
 bool enableHeading = ENABLE_HEADING_LOG;
 unsigned short accelFSR = IMU_ACCEL_FSR;
 unsigned short gyroFSR = IMU_GYRO_FSR;
@@ -104,7 +104,7 @@ void blinkLED()
   FlashStorage(flashEnableEuler, bool);
   FlashStorage(flashEnableEuler9DOF, bool);
   FlashStorage(flashEnableCal9DOF, bool);
-  FlashStorage(flashEnableROS9DOF, bool);
+  FlashStorage(flashEnableALT9DOF, bool);
   FlashStorage(flashEnableHeading, bool);
   FlashStorage(flashAccelFSR, unsigned short);
   FlashStorage(flashGyroFSR, unsigned short);
@@ -160,7 +160,7 @@ void loop()
     return; // If that fails (uh, oh), return to top
 
   // If enabled, read from the compass.
-  if ( (enableCompass || enableHeading || enableEuler9DOF || enableROS9DOF) && (imu.updateCompass() != INV_SUCCESS) )
+  if ( (enableCompass || enableHeading || enableEuler9DOF || enableALT9DOF) && (imu.updateCompass() != INV_SUCCESS) )
     return; // If compass read fails (uh, oh) return to top
 
   // If logging (to either UART and SD card) is enabled
@@ -369,7 +369,7 @@ void logIMUData(void)
     imuLog += String(-imu.calcGyro(imu.gy)*PI/180.0f) + ",";
     imuLog += String(-imu.calcGyro(imu.gz)*PI/180.0f) + ", ";
   }
-  if (enableROS9DOF) // If ROS-compatible logging is enabled
+  if (enableALT9DOF) // If AHRS ROS node compatible logging is enabled
   {
 	imu.computeEulerAngles();
 
@@ -591,7 +591,7 @@ void parseSerialInput(char c)
     flashEnableMagYaw.write(enableMagYaw);
 #endif
     break;
-#ifndef ROS_PARSE_INPUT_MODE
+#ifndef ROS_AHRS_PARSE_INPUT_MODE
   case PAUSE_LOGGING: // Pause logging on SPACE
     enableSerialLogging = !enableSerialLogging;
 #ifdef ENABLE_NVRAM_STORAGE
@@ -652,10 +652,10 @@ void parseSerialInput(char c)
     flashEnableCal9DOF.write(enableCal9DOF);
 #endif
     break;
-  case ENABLE_ROS9DOF: // Enable/disable ROS-compatible output
-    enableROS9DOF = !enableROS9DOF;
+  case ENABLE_ALT9DOF: // Enable/disable AHRS ROS node compatible output
+    enableALT9DOF = !enableALT9DOF;
 #ifdef ENABLE_NVRAM_STORAGE
-    flashEnableROS9DOF.write(enableROS9DOF);
+    flashEnableALT9DOF.write(enableALT9DOF);
 #endif
     break;
   case ENABLE_HEADING: // Enable/disable heading output
@@ -711,7 +711,7 @@ void parseSerialInput(char c)
     flashEnableSDLogging.write(enableSDLogging);
 #endif
     break;
-#endif // ROS_PARSE_INPUT_MODE
+#endif // ROS_AHRS_PARSE_INPUT_MODE
   default: // If an invalid character, do nothing
     break;
   }
@@ -738,7 +738,7 @@ void parseSerialInput(char c)
       flashEnableEuler.write(enableEuler);
       flashEnableEuler9DOF.write(enableEuler9DOF);
       flashEnableCal9DOF.write(enableCal9DOF);
-      flashEnableROS9DOF.write(enableROS9DOF);
+      flashEnableALT9DOF.write(enableALT9DOF);
       flashEnableHeading.write(enableHeading);
       flashAccelFSR.write(accelFSR);
       flashGyroFSR.write(gyroFSR);
@@ -761,7 +761,7 @@ void parseSerialInput(char c)
       enableEuler = flashEnableEuler.read();
       enableEuler9DOF = flashEnableEuler9DOF.read();
       enableCal9DOF = flashEnableCal9DOF.read();
-      enableROS9DOF = flashEnableROS9DOF.read();
+      enableALT9DOF = flashEnableALT9DOF.read();
       enableHeading = flashEnableHeading.read();
       accelFSR = flashAccelFSR.read();
       gyroFSR = flashGyroFSR.read();
