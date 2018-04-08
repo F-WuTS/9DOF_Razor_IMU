@@ -9,21 +9,21 @@
 //#define ENABLE_QUAT_LOG       false
 //#define ENABLE_EULER_LOG      false
 //#define ENABLE_HEADING_LOG    false
-#define ENABLE_MAG_YAW_LOG    true
-#define ENABLE_TIME_LOG       false
+#define ENABLE_MAG_YAW_LOG    false
+#define ENABLE_TIME_LOG       true
 #define ENABLE_CALCULATED_LOG true
-#define ENABLE_ACCEL_LOG      false
-#define ENABLE_GYRO_LOG       false
-#define ENABLE_MAG_LOG        false
+#define ENABLE_ACCEL_LOG      true
+#define ENABLE_GYRO_LOG       true
+#define ENABLE_MAG_LOG        true
 #define ENABLE_QUAT_LOG       false
 #define ENABLE_EULER_LOG      false
 #define ENABLE_EULER9DOF_LOG  false
 #define ENABLE_CAL9DOF_LOG    false
-#define ENABLE_ALT9DOF_LOG    true
+#define ENABLE_ALT9DOF_LOG    false
 #define ENABLE_HEADING_LOG    false
 
 // For AHRS ROS node compatibility...
-#define ROS_AHRS_PARSE_INPUT_MODE
+//#define ROS_AHRS_PARSE_INPUT_MODE
 
 // For calibration, see ptrbrtz firmware...
 
