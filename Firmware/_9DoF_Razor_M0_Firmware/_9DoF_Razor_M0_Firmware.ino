@@ -711,7 +711,7 @@ void parseSerialInput(char c)
     flashEnableSDLogging.write(enableSDLogging);
 #endif
     break;
-#endif // ROS_AHRS_PARSE_INPUT_MODE
+#endif // 
   default: // If an invalid character, do nothing
     break;
   }
@@ -900,4 +900,3 @@ void set_nets_all_inputs()
     pinMode(net_2_pins[i], INPUT);
   }   
 }
-

@@ -10,20 +10,20 @@
 //#define ENABLE_EULER_LOG      false
 //#define ENABLE_HEADING_LOG    false
 #define ENABLE_MAG_YAW_LOG    false
-#define ENABLE_TIME_LOG       true
-#define ENABLE_CALCULATED_LOG true
-#define ENABLE_ACCEL_LOG      true
-#define ENABLE_GYRO_LOG       true
-#define ENABLE_MAG_LOG        true
+#define ENABLE_TIME_LOG       false
+#define ENABLE_CALCULATED_LOG false
+#define ENABLE_ACCEL_LOG      false
+#define ENABLE_GYRO_LOG       false
+#define ENABLE_MAG_LOG        false
 #define ENABLE_QUAT_LOG       false
 #define ENABLE_EULER_LOG      false
 #define ENABLE_EULER9DOF_LOG  false
 #define ENABLE_CAL9DOF_LOG    false
-#define ENABLE_ALT9DOF_LOG    false
+#define ENABLE_ALT9DOF_LOG    true
 #define ENABLE_HEADING_LOG    false
 
 // For AHRS ROS node compatibility...
-//#define ROS_AHRS_PARSE_INPUT_MODE
+#define ROS_AHRS_PARSE_INPUT_MODE
 
 // For calibration, see ptrbrtz firmware...
 
@@ -38,15 +38,18 @@ float MAGN_Z_MAX = 600;
 
 // Magnetometer (extended calibration mode)
 // Set to true to use extended magnetometer calibration (compensates hard & soft iron errors)
-boolean CALIBRATION__MAGN_USE_EXTENDED = false;
-float magn_ellipsoid_center[3] = {0, 0, 0};
-float magn_ellipsoid_transform[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+//boolean CALIBRATION__MAGN_USE_EXTENDED = false;
+//float magn_ellipsoid_center[3] = {0, 0, 0};
+//float magn_ellipsoid_transform[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
+boolean CALIBRATION__MAGN_USE_EXTENDED = true;
+float magn_ellipsoid_center[3] = {91.5, -13.5, -48.1};
+float magn_ellipsoid_transform[3][3] = {{0.902, -0.00354, 0.000636}, {-0.00354, 0.9, -0.00599}, {0.000636, -0.00599, 1}};
 
 ////////////////////////////////////////
 // Enable Non-Volatile Memory Storage //
 ////////////////////////////////////////
 // If defined, FlashStorage library must be installed
-#define ENABLE_NVRAM_STORAGE
+//#define ENABLE_NVRAM_STORAGE
 
 ////////////////////////
 // Serial Port Config //
@@ -54,7 +57,7 @@ float magn_ellipsoid_transform[3][3] = {{0, 0, 0}, {0, 0, 0}, {0, 0, 0}};
 #define ENABLE_UART_LOGGING true
 // Select the Serial port to log to. Either SERIAL_PORT_USBVIRTUAL
 // or LOG_PORT SERIAL_PORT_HARDWARE (SerialUSB or Serial1)
-#define LOG_PORT SERIAL_PORT_USBVIRTUAL
+#define LOG_PORT SerialUSB
 #define SERIAL_BAUD_RATE 115200 // Serial port baud
 
 ////////////////
